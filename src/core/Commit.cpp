@@ -1,9 +1,10 @@
 #include <string>
-#include "Commit.h"
+#include "core/Commit.h"
 #include <unordered_map>
 #include <fstream>
 #include <iostream>
 #include <filesystem>
+#include "fileUtils/utils.h"
 Commit::Commit(const std::string& commitId,
                const std::string& commitMsg,
                const std::string& parentCommitId,
@@ -27,26 +28,21 @@ std::string Commit::getTime() const { return time; }
 std::unordered_map<std::string, std::string> Commit::getFileBlob() const { return fileBlob; }
 
 
-void writeString(std::ofstream& out, const std::string& str){
-  size_t size = str.size();
-  out.write(reinterpret_cast<const char*>(&size), sizeof(size)); //Reinterpret Cast is used to reiterpret the objects. It bypasses the most type-safety checks.
-  out.write(str.c_str(), size); //c_str gives a pointer of string type ending with null character '\0'.
-}
 
 void Commit::serialize(const std::string& filename){
   std::filesystem::create_directories(std::filesystem::path(filename).parent_path());
   std::ofstream file(filename, std::ios::binary);
   if(file.is_open()){
-    writeString(file, commitId);
-    writeString(file, commitMsg);
-    writeString(file, parentCommitId);
-    writeString(file, date);
-    writeString(file, time);
+    utils::writeString(file, commitId);
+    utils::writeString(file, commitMsg);
+    utils::writeString(file, parentCommitId);
+    utils::writeString(file, date);
+    utils::writeString(file, time);
     size_t mapSize = fileBlob.size();
     file.write(reinterpret_cast<const char*>(&mapSize), sizeof(mapSize));
     for(auto& [key, value]: fileBlob){
-      writeString(file, key);
-      writeString(file, value);
+      utils::writeString(file, key);
+      utils::writeString(file, value);
     }
     std::cout<<"Object serialized successfully.\n";
   }else{
@@ -54,15 +50,6 @@ void Commit::serialize(const std::string& filename){
   }
 }
 
-std::string readString(std::ifstream& in){
-    size_t size;
-    in.read(reinterpret_cast<char*>(&size), sizeof(size));
-
-    std::string str(size, '\0');  // allocate buffer
-    in.read(&str[0], size);       // fill it
-
-    return str;
-}
 
 Commit Commit::deserialize(const std::string& filename){
     std::ifstream in(filename, std::ios::binary);
@@ -71,11 +58,11 @@ Commit Commit::deserialize(const std::string& filename){
         throw std::runtime_error("Failed to open file for reading"); //@TODO: Implement the Try-Catch block for this later.
     }
 
-    std::string commitId = readString(in);
-    std::string commitMsg = readString(in);
-    std::string parentCommitId = readString(in);
-    std::string date = readString(in);
-    std::string time = readString(in);
+    std::string commitId = utils::readString(in);
+    std::string commitMsg = utils::readString(in);
+    std::string parentCommitId = utils::readString(in);
+    std::string date = utils::readString(in);
+    std::string time = utils::readString(in);
 
     size_t mapSize;
     in.read(reinterpret_cast<char*>(&mapSize), sizeof(mapSize));
@@ -83,8 +70,8 @@ Commit Commit::deserialize(const std::string& filename){
     std::unordered_map<std::string, std::string> fileBlob;
 
     for(size_t i = 0; i < mapSize; i++){
-        std::string key = readString(in);
-        std::string value = readString(in);
+        std::string key = utils::readString(in);
+        std::string value = utils::readString(in);
         fileBlob[key] = value;
     }
 
