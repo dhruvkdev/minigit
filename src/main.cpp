@@ -27,8 +27,13 @@ int main(){
   cout<< branch1.getBranchName()<<" "<< branch1.getCommitId()<<'\n';
   */ 
   string commitMsg = "This is the sample Commit Message for testing.";
+  string commit2 = "This is the second commit message for testing.";
   Repository repo1;
   repo1.init();
   repo1.commit(commitMsg);
+  repo1.createBranch("dhruv");
+  repo1.checkout("dhruv");
+  repo1.commit(commit2);
+  repo1.log();
   return 0;
 }

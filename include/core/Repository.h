@@ -21,4 +21,5 @@ class Repository {
     void updateBranch(std::string branch, std::string commitId);
     void commit(const std::string& message);
     void checkout(std::string branch);
+    void createBranch(std::string branch);
 };

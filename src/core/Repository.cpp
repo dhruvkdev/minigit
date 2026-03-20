@@ -9,7 +9,9 @@
 
 namespace fs = std::filesystem;
 
-std::string Repository::getHEAD() const { return HEAD; }
+std::string Repository::getHEAD() const{
+  return utils::readFromFile(repoPath + "/HEAD");
+} 
 std::string Repository::getBranchCommit(const std::string& branch) {
     return utils::readFromFile(repoPath + "/refs/heads/" + branch);
 }
@@ -53,7 +55,7 @@ void Repository::commit(const std::string& message){
   std::string path = repoPath + "/commits/" + commitId + ".bin";
   newCommit.serialize(path); // Commit Object stored in Disk.
 
-  // Commit check = newCommit.deserialize(path);
+  //Commit check = newCommit.deserialize(path);
   //std::cout<< check.getCommitMsg()<<'\n';
   
   //Updating the LatestCommit in the branch from here.
@@ -61,4 +63,43 @@ void Repository::commit(const std::string& message){
   utils::writeToFile(repoPath + "/refs/heads/" + branch, commitId);
 }
 
+void Repository::setHEAD(std::string head){
+  HEAD = head;
+  utils::writeToFile(repoPath + "/HEAD", "ref: refs/heads/" + HEAD);
+}
+
+void Repository::updateBranch(std::string branch, std::string commitId){
+  std::string path = repoPath + "/refs/heads/" + branch;
+  if(std::filesystem::exists(path)){
+    utils::writeToFile(path, commitId);
+  }else{
+    std::cout<<"No such branch exists!\n";
+  }
+}
+
+void Repository::checkout(std::string branch){
+  std::string path = repoPath + "/refs/heads/" + branch;
+  if(std::filesystem::exists(path)){
+    setHEAD(branch);
+  }else{
+    std::cout<<"The branch "<<branch<<" does not exist!\n";
+  }
+}
+
+void Repository::createBranch(std::string branch){
+  std::string path = repoPath + "/refs/heads/" + branch;
+  utils::writeToFile(path, getLatestCommit());
+}
+
+void Repository::log(){
+  std::string commitId = getLatestCommit();
+  while(!commitId.empty()){
+    Commit c = Commit::deserialize(repoPath + "/commits/" + commitId + ".bin");
+
+    std::cout<< c.getCommitId()<<'\n';
+    std::cout<< c.getCommitMsg()<<'\n\n';
+
+    commitId = c.getParentCommitId();
+  }
+}
 
