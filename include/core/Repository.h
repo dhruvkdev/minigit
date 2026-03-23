@@ -5,6 +5,7 @@
 #include "core/Branch.h"
 
 class Repository {
+  std::string repoRoot = "";
   std::string repoPath = ".mgit";
   std::string HEAD = "main";
   std::string latestCommit = "";

@@ -2,6 +2,11 @@
 #include <fstream>
 #include <filesystem>
 #include <iostream>
+#include <filesystem>
+#include <sstream>
+#include <unordered_map>
+#include <string>
+#include <string_view>
 
 namespace utils{
   void writeString(std::ofstream& out, const std::string& str){
@@ -39,5 +44,26 @@ namespace utils{
     // Strip trailing newline for cleaner hashes/pointers
     if (!content.empty() && content.back() == '\n') content.pop_back(); 
     return content;
+  }
+  std::unordered_map<std::string, std::string>buildSnapshot(const std::string& root){
+    std::unordered_map<std::string, std::string> snapshot;
+
+    for(const auto&entry: std::filesystem::recursive_directory_iterator(root)){
+      if(entry.is_regular_file()){
+        std::string relativePath = std::filesystem::relative(entry.path(), root).string();
+
+        //We are skipping .mgit and .git folders for now.
+        if (relativePath.starts_with(".mgit"))continue;
+        if(relativePath.starts_with(".git"))continue;
+
+        std::ifstream in(entry.path(), std::ios::binary);
+        if(!in)continue;
+
+        std::stringstream buffer;
+        buffer << in.rdbuf();
+        snapshot[relativePath] = buffer.str();
+      }
+    }
+    return snapshot;
   }
 }

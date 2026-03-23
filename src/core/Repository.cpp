@@ -26,6 +26,7 @@ std::string Repository::getLatestCommit() {
     return getBranchCommit(branch);
 }
 void Repository::init(){
+  repoRoot = fs::current_path().string();
   // 1. Create the directories
   fs::create_directories(repoPath + "/commits");
   fs::create_directories(repoPath + "/refs/heads");
@@ -46,18 +47,26 @@ void Repository::commit(const std::string& message){
   std::string date = "Today"; //@TODO: Format Date and Time has to be done using chrono.
   std::string time = "Now";
 
+  /*
   std::unordered_map<std::string, std::string> mp; //@TODO: The automation of files in the unordered_map is yet to be done.
   mp["file1.txt"] = "This is the text for file 01.";
   mp["file2.txt"] = "This is the text for file 02.";
+  */ 
+
+  auto mp = utils::buildSnapshot(repoRoot);
 
   Commit newCommit(commitId, message, parentCommitId, mp, date, time);
 
   std::string path = repoPath + "/commits/" + commitId + ".bin";
   newCommit.serialize(path); // Commit Object stored in Disk.
 
-  //Commit check = newCommit.deserialize(path);
+  Commit check = newCommit.deserialize(path);
   //std::cout<< check.getCommitMsg()<<'\n';
-  
+  for(auto [p, q]: check.getFileBlob()){
+    std::cout<<"\n\n----------------------------------------NEW FILE-------------------------------------\n\n";
+    std::cout << p << ": " << q.substr(0, 100) << "\n";
+  }
+
   //Updating the LatestCommit in the branch from here.
   std::string branch = getCurrentBranch();
   utils::writeToFile(repoPath + "/refs/heads/" + branch, commitId);
