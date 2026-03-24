@@ -53,6 +53,7 @@ namespace utils{
   }
   
   std::unordered_map<std::string, std::string> buildSnapshot(const std::string& root){
+    //std::cout<<"The ROOT location given to utils is: "<<root<<'\n';
     // Skipping all the files from .mgitignore 
     std::ifstream f(root + "/.mgitignore");
     std::vector<std::string> ignorables;

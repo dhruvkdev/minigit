@@ -23,4 +23,8 @@ class Repository {
     void commit(const std::string& message);
     void checkout(std::string branch);
     void createBranch(std::string branch);
+
+    void loadRepo();
+    std::string findRepoRoot();
+
 };

@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iostream>
 #include <filesystem>
+#include <stdexcept>
 
 namespace fs = std::filesystem;
 
@@ -33,6 +34,8 @@ std::string Repository::getLatestCommit() {
 }
 void Repository::init(){
   repoRoot = fs::current_path().string();
+  repoPath = repoRoot + "/.mgit";
+  //std::cout<<"Repo Root in init is set to: "<<repoRoot<<'\n';
   // 1. Create the directories
   fs::create_directories(repoPath + "/commits");
   fs::create_directories(repoPath + "/refs/heads");
@@ -46,7 +49,42 @@ void Repository::init(){
   std::cout << "Initialized empty MiniGit repository in " << repoPath << "\n";
 }
 
+std::string Repository::findRepoRoot() {
+    fs::path current = fs::current_path();
+
+    while (true) {
+        // If we're inside .mgit, go one level up
+        if (current.filename() == ".mgit") {
+            current = current.parent_path();
+        }
+
+        fs::path mgitPath = current / ".mgit";
+
+        if (fs::exists(mgitPath) && fs::is_directory(mgitPath)) {
+            return current.string();
+        }
+
+        if (current == current.root_path()) {
+            break;
+        }
+
+        current = current.parent_path();
+    }
+
+    throw std::runtime_error("Not a MiniGit repository (or any parent directory)");
+}
+
+void Repository::loadRepo(){
+  repoRoot = findRepoRoot();
+  repoPath = repoRoot + "/.mgit";
+   if (!fs::exists(repoPath)) {
+      throw std::runtime_error("Not a MiniGit repository");
+  }
+}
+
 void Repository::commit(const std::string& message){
+  loadRepo();
+
   std::string commitId = hash::generateHash(message);
   std::string parentCommitId = getLatestCommit();
 
@@ -121,7 +159,7 @@ void Repository::log() {
 
         // Date
         std::cout << GREEN << "Date: " << RESET
-                  << c.getDate() << " " << c.getTime() << "\n";
+                  << c.getDate() << "\n";
 
         //Time 
         std::cout << GREEN <<"Time: " << RESET

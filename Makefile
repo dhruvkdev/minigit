@@ -10,7 +10,7 @@ SRC = src/main.cpp \
 
 OBJ = $(SRC:.cpp=.o)
 
-OUT = main
+OUT = mgit
 
 all: $(OUT)
 
