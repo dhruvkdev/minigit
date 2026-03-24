@@ -44,8 +44,8 @@ void Repository::commit(const std::string& message){
   std::string commitId = hash::generateHash(message);
   std::string parentCommitId = getLatestCommit();
 
-  std::string date = "Today"; //@TODO: Format Date and Time has to be done using chrono.
-  std::string time = "Now";
+  std::string date = utils::getCurrentDate(); //@TODO: Format Date and Time has to be done using chrono.
+  std::string time = utils::getCurrentTime();
 
   /*
   std::unordered_map<std::string, std::string> mp; //@TODO: The automation of files in the unordered_map is yet to be done.
@@ -106,7 +106,9 @@ void Repository::log(){
     Commit c = Commit::deserialize(repoPath + "/commits/" + commitId + ".bin");
 
     std::cout<< c.getCommitId()<<'\n';
-    std::cout<< c.getCommitMsg()<<'\n\n';
+    std::cout<< c.getCommitMsg()<<'\n';
+    std::cout<< c.getDate()<<'\n';
+    std::cout<< c.getTime()<<'\n';
 
     commitId = c.getParentCommitId();
   }

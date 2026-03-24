@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -std=c++20  -Iinclude -Wall
+CXXFLAGS = -std=c++20  -Iinclude -Wall -lssl -lcrypto
 
 SRC = src/main.cpp \
       src/core/Commit.cpp \
