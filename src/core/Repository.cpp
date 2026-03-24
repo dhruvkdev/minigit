@@ -9,6 +9,12 @@
 
 namespace fs = std::filesystem;
 
+#define RESET   "\033[0m"
+#define YELLOW  "\033[33m"
+#define GREEN   "\033[32m"
+#define CYAN    "\033[36m"
+#define BOLD    "\033[1m"
+
 std::string Repository::getHEAD() const{
   return utils::readFromFile(repoPath + "/HEAD");
 } 
@@ -44,14 +50,8 @@ void Repository::commit(const std::string& message){
   std::string commitId = hash::generateHash(message);
   std::string parentCommitId = getLatestCommit();
 
-  std::string date = utils::getCurrentDate(); //@TODO: Format Date and Time has to be done using chrono.
+  std::string date = utils::getCurrentDate();
   std::string time = utils::getCurrentTime();
-
-  /*
-  std::unordered_map<std::string, std::string> mp; //@TODO: The automation of files in the unordered_map is yet to be done.
-  mp["file1.txt"] = "This is the text for file 01.";
-  mp["file2.txt"] = "This is the text for file 02.";
-  */ 
 
   auto mp = utils::buildSnapshot(repoRoot);
 
@@ -62,10 +62,12 @@ void Repository::commit(const std::string& message){
 
   Commit check = newCommit.deserialize(path);
   //std::cout<< check.getCommitMsg()<<'\n';
+  /*
   for(auto [p, q]: check.getFileBlob()){
     std::cout<<"\n\n----------------------------------------NEW FILE-------------------------------------\n\n";
     std::cout << p << ": " << q.substr(0, 100) << "\n";
   }
+  */ 
 
   //Updating the LatestCommit in the branch from here.
   std::string branch = getCurrentBranch();
@@ -100,17 +102,37 @@ void Repository::createBranch(std::string branch){
   utils::writeToFile(path, getLatestCommit());
 }
 
-void Repository::log(){
-  std::string commitId = getLatestCommit();
-  while(!commitId.empty()){
-    Commit c = Commit::deserialize(repoPath + "/commits/" + commitId + ".bin");
+void Repository::log() {
+    std::string commitId = getLatestCommit();
+    std::string currentBranch = getCurrentBranch();
 
-    std::cout<< c.getCommitId()<<'\n';
-    std::cout<< c.getCommitMsg()<<'\n';
-    std::cout<< c.getDate()<<'\n';
-    std::cout<< c.getTime()<<'\n';
+    while (!commitId.empty()) {
+        Commit c = Commit::deserialize(repoPath + "/commits/" + commitId + ".bin");
 
-    commitId = c.getParentCommitId();
-  }
+        // Commit header
+        std::cout << BOLD << YELLOW << "commit " << c.getCommitId() << RESET;
+
+        // Show HEAD pointer
+        if (commitId == getLatestCommit()) {
+            std::cout << " " << CYAN << "(HEAD -> " << currentBranch << ")" << RESET;
+        }
+
+        std::cout << "\n";
+
+        // Date
+        std::cout << GREEN << "Date: " << RESET
+                  << c.getDate() << " " << c.getTime() << "\n";
+
+        //Time 
+        std::cout << GREEN <<"Time: " << RESET
+                  << c.getTime() << " " << "\n\n";
+
+        // Message (indented like git)
+        std::cout << "    " << c.getCommitMsg() << "\n\n";
+
+        // Separator
+        std::cout << "----------------------------------------\n";
+
+        commitId = c.getParentCommitId();
+    }
 }
-
