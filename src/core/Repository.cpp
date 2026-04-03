@@ -84,7 +84,7 @@ void Repository::loadRepo(){
 void Repository::add(std::vector<std::string>& filesToStage)
 {
   
-  std::ofstream indexFile(".mgit/staged", std::ios::trunc);
+  std::ofstream indexFile(".mgit/staged", std::ios::app);
   if (!indexFile.is_open()) {
         std::cerr << "Fatal: Could not open .mgit/staged for writing.\n";
         return;
@@ -148,6 +148,10 @@ void Repository::commit(const std::string& message){
   //Updating the LatestCommit in the branch from here.
   std::string branch = getCurrentBranch();
   utils::writeToFile(repoPath + "/refs/heads/" + branch, commitId);
+  
+  // Clearing the staging area
+  std::ofstream stagingFile(".mgit/staged", std::ios::trunc);
+  stagingFile.close();
 }
 
 void Repository::setHEAD(std::string head){
