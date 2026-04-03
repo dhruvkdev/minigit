@@ -1,5 +1,5 @@
 #include "core/Repository.h"
-#include "core/Branch.h"
+#include "core/branch.hxx"
 #include "core/Commit.h"
 #include "fileUtils/hash.h"
 #include "fileUtils/utils.h"
@@ -81,7 +81,23 @@ void Repository::loadRepo(){
       throw std::runtime_error("Not a MiniGit repository");
   }
 }
+void Repository::add(std::vector<std::string>& filesToStage)
+{
+  
+  std::ofstream indexFile(".mgit/staged", std::ios::trunc);
+  if (!indexFile.is_open()) {
+        std::cerr << "Fatal: Could not open .mgit/staged for writing.\n";
+        return;
+    }
 
+    for (const auto& file : filesToStage) {
+        indexFile << file << '\n';
+        if(file == ".") std::cout << "Staged all the files." << '\n';
+        else std::cout << "Staged: " << file << '\n';
+    }
+
+    indexFile.close();
+}
 void Repository::commit(const std::string& message){
   loadRepo();
 
@@ -90,22 +106,44 @@ void Repository::commit(const std::string& message){
 
   std::string date = utils::getCurrentDate();
   std::string time = utils::getCurrentTime();
+  
+  std::ifstream indexFile(".mgit/staged");
+  std::vector<std::string> stagedFiles;
+  std::string file;
+  while (std::getline(indexFile, file)) 
+  {
+    if (!file.empty()) 
+    {
+      stagedFiles.push_back(file);
+    }
+  }
+  indexFile.close();
 
-  auto mp = utils::buildSnapshot(repoRoot);
-
+  std::unordered_map<std::string, std::string> mp;
+  if(stagedFiles.size() == 0)
+  {
+    std::cout<<"No files staged.\n";
+    return;
+  }
+  else if(stagedFiles.size() == 1 && stagedFiles[0] == ".") mp = utils::buildSnapshotAll(repoRoot);
+  else
+  {
+    mp = utils::buildSnapshot(repoRoot, stagedFiles);
+  }
+  
   Commit newCommit(commitId, message, parentCommitId, mp, date, time);
 
   std::string path = repoPath + "/commits/" + commitId + ".bin";
   newCommit.serialize(path); // Commit Object stored in Disk.
 
   Commit check = newCommit.deserialize(path);
-  //std::cout<< check.getCommitMsg()<<'\n';
-  /*
+  std::cout<< check.getCommitMsg()<<'\n';
+
   for(auto [p, q]: check.getFileBlob()){
     std::cout<<"\n\n----------------------------------------NEW FILE-------------------------------------\n\n";
     std::cout << p << ": " << q.substr(0, 100) << "\n";
   }
-  */ 
+  
 
   //Updating the LatestCommit in the branch from here.
   std::string branch = getCurrentBranch();

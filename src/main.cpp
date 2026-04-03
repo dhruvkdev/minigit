@@ -1,6 +1,7 @@
 #include "core/Repository.h"
 #include <iostream>
-
+#include <vector>
+#include <string>
 int main(int argc, char* argv[]){
   if (argc < 2) {
       std::cout << "Usage: mgit <command>\n";
@@ -31,6 +32,12 @@ int main(int argc, char* argv[]){
       return 1;
     }
     repo.checkout(argv[2]);
+  }else if(command == "add"){
+    std::vector<std::string> filesToStage;
+    for(int i = 2; i<argc; i++){
+      filesToStage.push_back(argv[i]);
+    }
+    repo.add(filesToStage);
   }else{
     std::cout<<"Unknown Command.\n";
   }
