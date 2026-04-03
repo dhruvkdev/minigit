@@ -133,6 +133,13 @@ void Repository::commit(const std::string& message){
     if(!parentCommitId.empty())
     {
       std::string parentCommitFilePaths = repoPath + "/commits/" + parentCommitId + ".bin";
+      Commit parentCommit = Serialization::deserialize(parentCommitFilePaths);
+      std::unordered_map<std::string, std::string> parent_mp = parentCommit.getFileBlob();
+      for(auto [file, content] : parent_mp)
+      {
+        if(mp.find(file)!=mp.end()) continue;
+        mp[file] = content;
+      }
     }
     
   }
