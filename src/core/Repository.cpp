@@ -216,7 +216,7 @@ void Repository::checkout(std::string branch){
     return;
   }
 
-  for(auto [file, content] : branch_mp)
+  for(auto& [file, content] : branch_mp)
   {
     repoRoot = findRepoRoot();
     std::filesystem::path fullPath = std::filesystem::path(repoRoot) / file;
