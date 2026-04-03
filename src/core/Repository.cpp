@@ -189,6 +189,13 @@ void Repository::log() {
     while (!commitId.empty()) {
         Commit c = Commit::deserialize(repoPath + "/commits/" + commitId + ".bin");
 
+        /* 
+        for(auto& [p, q]: c.getFileBlob()){
+          std::cout<<p<<'\n';
+          std::cout<<q.substr(0,100);
+        }
+        */ 
+
         // Commit header
         std::cout << BOLD << YELLOW << "commit " << c.getCommitId() << RESET;
 
