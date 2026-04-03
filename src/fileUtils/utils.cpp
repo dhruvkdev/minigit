@@ -52,7 +52,26 @@ namespace utils{
     return content;
   }
   
-  std::unordered_map<std::string, std::string> buildSnapshot(const std::string& root){
+  std::unordered_map<std::string, std::string> buildSnapshot(const std::string& root, std::vector<std::string>& stagedFiles)
+  {
+    std::unordered_map<std::string, std::string> snapshot;
+
+    for(auto& file : stagedFiles)
+    {
+      std::string filePath = root + "/" + file;
+      std::filesystem::directory_entry entry(filePath);
+
+      std::ifstream in(entry.path(), std::ios::binary);
+            if(!in) continue;
+
+            std::stringstream buffer;
+            buffer << in.rdbuf();
+            snapshot[file] = buffer.str();
+    }
+    return snapshot;
+  }
+
+  std::unordered_map<std::string, std::string> buildSnapshotAll(const std::string& root){
     //std::cout<<"The ROOT location given to utils is: "<<root<<'\n';
     // Skipping all the files from .mgitignore 
     std::ifstream f(root + "/.mgitignore");
