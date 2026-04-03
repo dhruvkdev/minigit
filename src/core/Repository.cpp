@@ -132,8 +132,8 @@ void Repository::commit(const std::string& message){
     mp = utils::buildSnapshot(repoRoot, stagedFiles);
     if(!parentCommitId.empty())
     {
-      std::string parentCommitFilePaths = repoPath + "/commits/" + parentCommitId + ".bin";
-      Commit parentCommit = Serialization::deserialize(parentCommitFilePaths);
+      std::string parentCommitFilePath = repoPath + "/commits/" + parentCommitId + ".bin";
+      Commit parentCommit = Serialization::deserialize(parentCommitFilePath);
       std::unordered_map<std::string, std::string> parent_mp = parentCommit.getFileBlob();
       for(auto [file, content] : parent_mp)
       {
@@ -183,10 +183,59 @@ void Repository::updateBranch(std::string branch, std::string commitId){
 
 void Repository::checkout(std::string branch){
   std::string path = repoPath + "/refs/heads/" + branch;
-  if(std::filesystem::exists(path)){
-    setHEAD(branch);
-  }else{
+  if(!std::filesystem::exists(path)){
     std::cout<<"The branch "<<branch<<" does not exist!\n";
+    return;
+  }
+
+  //Clearning old branch files
+  std::string currentCommitId = getLatestCommit();
+  if (!currentCommitId.empty()) 
+  {
+    std::string currentCommitPath = repoPath + "/commits/" + currentCommitId + ".bin";
+    if (std::filesystem::exists(currentCommitPath)) {
+      Commit currentCommit = Serialization::deserialize(currentCommitPath);
+      for (auto const& [file, content] : currentCommit.getFileBlob()) {
+        std::filesystem::path fullPath = std::filesystem::path(findRepoRoot()) / file;
+        if (std::filesystem::exists(fullPath)) {
+            std::filesystem::remove(fullPath); 
+        }
+      }
+    }
+  }
+
+  setHEAD(branch);
+  std::string branchCommitId = getBranchCommit(branch);
+  if(branchCommitId.empty()) return;
+  std::string branchCommitFilePath = repoPath + "/commits/" + branchCommitId + ".bin";
+  Commit branchCommit = Serialization::deserialize(branchCommitFilePath);
+  std::unordered_map<std::string, std::string> branch_mp = branchCommit.getFileBlob();
+  if(branch_mp.empty())
+  {
+    std::cout<<"EMPTY\n";
+    return;
+  }
+
+  for(auto [file, content] : branch_mp)
+  {
+    repoRoot = findRepoRoot();
+    std::filesystem::path fullPath = std::filesystem::path(repoRoot) / file;
+    if (fullPath.has_parent_path())
+    {
+      std::filesystem::create_directories(fullPath.parent_path());
+    }
+
+    std::ofstream outFile(fullPath, std::ios::binary | std::ios::trunc);
+    std::cout<<file<<" "<<content<<'\n';
+    if (outFile.is_open()) 
+    {
+      outFile.write(content.c_str(), content.size());
+      outFile.close();
+    }
+    else 
+    {
+      std::cerr << "Fatal: Could not open file for restoring: " << fullPath << "\n";
+    }
   }
 }
 
