@@ -1,18 +1,18 @@
 CXX = g++
-CXXFLAGS = -std=c++23  -Iinclude -Wall 
+
+CXXFLAGS = -std=c++23 -Iinclude -Wall 
+
 LDLIBS = -lssl -lcrypto
+
 SRC = src/main.cpp \
-      src/core/Commit.cpp \
-			src/core/Branch.cpp \
-			src/core/Repository.cpp \
-      src/fileUtils/utils.cpp \
-			src/fileUtils/hash.cpp
-
+	src/core/Commit.cpp \
+	src/core/Branch.cpp \
+	src/core/Repository.cpp \
+    src/fileUtils/utils.cpp \
+	src/fileUtils/hash.cpp
 OBJ = $(SRC:.cpp=.o)
-
 OUT = mgit
-
-all: $(OUT)
+all:	$(OUT)
 
 $(OUT): $(OBJ)
 	$(CXX) $(CXXFLAGS) $(OBJ) -o $(OUT) $(LDLIBS)
@@ -22,3 +22,4 @@ $(OUT): $(OBJ)
 
 clean:
 	rm -f $(OUT) $(OBJ)
+

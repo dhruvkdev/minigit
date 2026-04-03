@@ -2,3 +2,5 @@
 main
 builds/*
 .exe
+include/*
+src/*
