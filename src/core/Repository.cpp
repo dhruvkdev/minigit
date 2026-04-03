@@ -130,6 +130,11 @@ void Repository::commit(const std::string& message){
   else
   {
     mp = utils::buildSnapshot(repoRoot, stagedFiles);
+    if(!parentCommitId.empty())
+    {
+      std::string parentCommitFilePaths = repoPath + "/commits/" + parentCommitId + ".bin";
+    }
+    
   }
   
   Commit newCommit(commitId, message, parentCommitId, mp, date, time);
