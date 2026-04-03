@@ -130,6 +130,18 @@ void Repository::commit(const std::string& message){
   else
   {
     mp = utils::buildSnapshot(repoRoot, stagedFiles);
+    if(!parentCommitId.empty())
+    {
+      std::string parentCommitFilePaths = repoPath + "/commits/" + parentCommitId + ".bin";
+      Commit parentCommit = Serialization::deserialize(parentCommitFilePaths);
+      std::unordered_map<std::string, std::string> parent_mp = parentCommit.getFileBlob();
+      for(auto [file, content] : parent_mp)
+      {
+        if(mp.find(file)!=mp.end()) continue;
+        mp[file] = content;
+      }
+    }
+    
   }
   
   Commit newCommit(commitId, message, parentCommitId, mp, date, time);
