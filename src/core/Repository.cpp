@@ -180,6 +180,75 @@ void Repository::updateBranch(std::string branch, std::string commitId){
     std::cout<<"No such branch exists!\n";
   }
 }
+void Repository::status(){
+  std::cout<<"On branch "<<getCurrentBranch()<<'\n';
+  std::string commitId = getLatestCommit();
+  if (!commitId.empty()) {
+    Commit c = Serialization::deserialize(repoPath + "/commits/" + commitId + ".bin");
+    std::cout<<"Date: "<<c.getDate()<<'\n';
+    std::cout<<"Time: "<<c.getTime()<<'\n';
+  }
+  std::cout<<"Changes to be committed:\n";
+  std::ifstream indexFile(repoPath + "/staged");
+  std::string file;
+  while (std::getline(indexFile, file)) 
+  {
+    if (!file.empty()) 
+    {
+      std::cout<<file<<'\n';
+    }
+  }
+  indexFile.close();
+}
+
+void Repository::merge(const std::string& targetBranch) {
+  loadRepo();
+  std::string currCommitId = getLatestCommit();
+  
+  std::string branchPath = repoPath + "/refs/heads/" + targetBranch;
+  if(!std::filesystem::exists(branchPath)){
+      std::cout << "Target branch '" << targetBranch << "' does not exist!\n";
+      return;
+  }
+  std::string targetCommitId = getBranchCommit(targetBranch);
+
+  std::string currCommitPath = repoPath + "/commits/" + currCommitId + ".bin";
+  std::string targetCommitPath = repoPath + "/commits/" + targetCommitId + ".bin";
+
+  Commit currCommit = Serialization::deserialize(currCommitPath);
+  Commit targetCommit = Serialization::deserialize(targetCommitPath);
+
+  auto currBlob = currCommit.getFileBlob();
+  auto targetBlob = targetCommit.getFileBlob();
+
+  for (auto const& [fileName, targetContent] : targetBlob) {
+      if (currBlob.find(fileName) != currBlob.end()) {
+          if (currBlob[fileName] != targetContent) {
+              std::cout << "\nMerge Conflict detected in: " << fileName << "\n";
+              std::cout << "1. Accept Incoming Changes\n";
+              std::cout << "2. Reject Incoming Changes\n";
+              std::cout << "3. Keep Both Changes\n";
+              std::cout << "Enter your choice (1/2/3): ";
+              std::cout<<"\n<<<< INCOMING CHANGES >>>>\n"<<targetContent<<"\n<<<< CURRENT CHANGES >>>>\n"<<currBlob[fileName]<<'\n';
+              int choice;
+              std::cin >> choice;
+              if (choice == 1) {
+                  utils::writeToFile(repoRoot + "/" + fileName, targetContent);
+              } else if (choice == 3) {
+                  std::string combined = currBlob[fileName] + "\n" + targetContent;
+                  utils::writeToFile(repoRoot + "/" + fileName, combined);
+              }
+          }
+      } else {
+          utils::writeToFile(repoRoot + "/" + fileName, targetContent);
+      }
+  }
+
+  std::vector<std::string> filesToStage = {"."};
+  add(filesToStage);
+  commit("Merge branch " + targetBranch);
+  std::cout << "Successfully merged " << targetBranch << " into " << getCurrentBranch() << "!\n";
+}
 
 void Repository::checkout(std::string branch){
   std::string path = repoPath + "/refs/heads/" + branch;

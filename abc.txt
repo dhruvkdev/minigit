@@ -1,0 +1,3 @@
+Merge function should work now
+
+Just testing the merge function
