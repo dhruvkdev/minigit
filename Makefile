@@ -6,7 +6,8 @@ SRC = src/main.cpp \
 			src/core/Branch.cpp \
 			src/core/Repository.cpp \
       src/fileUtils/utils.cpp \
-			src/fileUtils/hash.cpp
+			src/fileUtils/hash.cpp \
+			src/fileUtils/serialization.cpp
 
 OBJ = $(SRC:.cpp=.o)
 

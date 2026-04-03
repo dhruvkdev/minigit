@@ -25,5 +25,4 @@ class Commit{
 
     //We serialize and Deserialize to store the object in disk, in the .mgit folder later.
     void serialize(const std::string& filename);
-    static Commit deserialize(const std::string& filename);
 };

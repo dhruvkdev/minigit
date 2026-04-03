@@ -7,6 +7,7 @@
 #include <iostream>
 #include <filesystem>
 #include <stdexcept>
+#include "fileUtils/serialization.hxx"
 
 namespace fs = std::filesystem;
 
@@ -136,7 +137,7 @@ void Repository::commit(const std::string& message){
   std::string path = repoPath + "/commits/" + commitId + ".bin";
   newCommit.serialize(path); // Commit Object stored in Disk.
 
-  Commit check = newCommit.deserialize(path);
+  Commit check = Serialization::deserialize(path);
   std::cout<< check.getCommitMsg()<<'\n';
 
   for(auto [p, q]: check.getFileBlob()){
@@ -187,7 +188,7 @@ void Repository::log() {
     std::string currentBranch = getCurrentBranch();
 
     while (!commitId.empty()) {
-        Commit c = Commit::deserialize(repoPath + "/commits/" + commitId + ".bin");
+        Commit c = Serialization::deserialize(repoPath + "/commits/" + commitId + ".bin");
 
         /* 
         for(auto& [p, q]: c.getFileBlob()){
