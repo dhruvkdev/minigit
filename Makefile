@@ -1,6 +1,6 @@
 CXX = g++
-CXXFLAGS = -std=c++23  -Iinclude -Wall -lssl -lcrypto
-
+CXXFLAGS = -std=c++23  -Iinclude -Wall 
+LDLIBS = -lssl -lcrypto
 SRC = src/main.cpp \
       src/core/Commit.cpp \
 			src/core/Branch.cpp \
@@ -15,10 +15,10 @@ OUT = mgit
 all: $(OUT)
 
 $(OUT): $(OBJ)
-	$(CXX) $(CXXFLAGS) $(OBJ) -o $(OUT)
+	$(CXX) $(CXXFLAGS) $(OBJ) -o $(OUT) $(LDLIBS)
 
 %.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c $< -o $@ 
 
 clean:
 	rm -f $(OUT) $(OBJ)
