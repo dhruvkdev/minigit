@@ -1,3 +1,4 @@
 .mgit
 *.o
 mgit
+.mgitignore
