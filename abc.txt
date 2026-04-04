@@ -1,2 +1,5 @@
 This is a common line.
 This belongs to the test1 branch.
+
+This is a common line.
+This belongs to the main branch.

@@ -8,7 +8,6 @@ class Branch{
     Branch(std::string& branchName, std::string& commitId);
     std::string getBranchName() const;
     std::string getCommitId() const;
-
 };
 
 

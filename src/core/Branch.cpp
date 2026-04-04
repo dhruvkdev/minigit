@@ -13,5 +13,3 @@ Branch::Branch(std::string& branchName, std::string& commitId){
 std::string Branch::getBranchName() const { return branchName; }
 std::string Branch::getCommitId() const { return commitId; }
 
-
-
