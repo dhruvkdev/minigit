@@ -38,6 +38,14 @@ int main(int argc, char* argv[]){
       filesToStage.push_back(argv[i]);
     }
     repo.add(filesToStage);
+  }else if(command == "status"){
+    repo.status();
+  }else if(command == "merge"){
+    if(argc < 3){
+      std::cout<<"Branch Name is required.\n";
+      return 1;
+    }
+    repo.merge(argv[2]);
   }else{
     std::cout<<"Unknown Command.\n";
   }

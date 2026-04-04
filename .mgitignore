@@ -1,6 +1,16 @@
-*.o 
-main
-builds/*
-.exe
-include/*
-src/*
+# Build artifacts
+*.o
+*.exe
+
+# Build folders
+build/
+builds/
+
+# Temporary files
+*.log
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
+mgit.exe
