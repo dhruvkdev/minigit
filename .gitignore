@@ -1,5 +1,4 @@
 .mgit
 *.o
 mgit
-.mgitignore
 mgit.exe

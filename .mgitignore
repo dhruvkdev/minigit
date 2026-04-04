@@ -14,3 +14,8 @@ builds/
 .DS_Store
 Thumbs.db
 mgit.exe
+
+src/*
+include/*
+mgit
+Makefile

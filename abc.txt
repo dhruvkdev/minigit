@@ -1,3 +1,2 @@
-Merge function should work now
-
-Just testing the merge function
+This is a common line.
+This belongs to the test1 branch.
