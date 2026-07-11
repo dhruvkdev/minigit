@@ -181,6 +181,7 @@ std::vector<Hunk> pathToHunks(const std::vector<Point>& path,
                               const std::vector<std::string>& a,
                               const std::vector<std::string>& b) {
   std::vector<Hunk> hunks;
+
   auto addHunk = [&](Op op, const std::string& line) {
     if (!hunks.empty() && hunks.back().op == op) {
       hunks.back().lines.push_back(line);
@@ -190,26 +191,30 @@ std::vector<Hunk> pathToHunks(const std::vector<Point>& path,
   };
 
   for (size_t i = 1; i < path.size(); ++i) {
-    Point p1 = path[i - 1];
-    Point p2 = path[i];
+    int x = path[i - 1].x;
+    int y = path[i - 1].y;
+    const int ex = path[i].x;
+    const int ey = path[i].y;
 
-    int x = p1.x;
-    int y = p1.y;
-    int k1 = x - y;
-    int k2 = p2.x - p2.y;
+    // A segment from (x,y) to (ex,ey) consists of:
+    //   - at most one horizontal step (delete from a) or vertical step (insert from b)
+    //   - followed by zero or more diagonal steps (equal)
+    // OR it can be a pure-diagonal run (when from == to on the same diagonal).
 
-    if (k2 > k1) {
-      addHunk(Op::Delete, a[x]);
-      x++;
-    } else if (k2 < k1) {
-      addHunk(Op::Insert, b[y]);
-      y++;
-    }
-
-    while (x < p2.x && y < p2.y) {
-      addHunk(Op::Equal, a[x]);
-      x++;
-      y++;
+    while (x != ex || y != ey) {
+      if (x < ex && y < ey && x < static_cast<int>(a.size()) && y < static_cast<int>(b.size()) && a[x] == b[y]) {
+        // diagonal — equal
+        addHunk(Op::Equal, a[x]);
+        ++x; ++y;
+      } else if (x < ex && (y >= ey || (x < static_cast<int>(a.size()) && (y >= static_cast<int>(b.size()) || a[x] != b[y])))) {
+        // horizontal — delete
+        addHunk(Op::Delete, a[x]);
+        ++x;
+      } else {
+        // vertical — insert
+        addHunk(Op::Insert, b[y]);
+        ++y;
+      }
     }
   }
   return hunks;
@@ -362,83 +367,146 @@ MergeResult threeWayMerge(const std::string& base, const std::string& ours,
                           const std::string& theirs) {
   MergeResult result;
 
-  if (ours == theirs) {
-    result.text = ours;
-    return result;
-  }
-  if (ours == base) {
-    result.text = theirs;
-    return result;
-  }
-  if (theirs == base) {
-    result.text = ours;
-    return result;
-  }
+  // Fast paths
+  if (ours == theirs) { result.text = ours; return result; }
+  if (ours == base)   { result.text = theirs; return result; }
+  if (theirs == base) { result.text = ours; return result; }
 
-  auto baseLines = splitLines(base);
-  auto oursLines = splitLines(ours);
+  auto baseLines   = splitLines(base);
+  auto oursLines   = splitLines(ours);
   auto theirsLines = splitLines(theirs);
 
-  auto oursEdits = extractEdits(baseLines, myersDiff(baseLines, oursLines));
+  auto oursEdits   = extractEdits(baseLines, myersDiff(baseLines, oursLines));
   auto theirsEdits = extractEdits(baseLines, myersDiff(baseLines, theirsLines));
 
-  size_t oursEdit = 0;
-  size_t theirsEdit = 0;
-  size_t baseIdx = 0;
+  size_t oi = 0;          // index into oursEdits
+  size_t ti = 0;          // index into theirsEdits
+  size_t baseIdx = 0;     // next unconsumed base line
   bool conflict = false;
   std::vector<std::string> merged;
 
-  while (baseIdx < baseLines.size() || oursEdit < oursEdits.size() ||
-         theirsEdit < theirsEdits.size()) {
-    bool hasOurs = oursEdit < oursEdits.size();
-    bool hasTheirs = theirsEdit < theirsEdits.size();
+  while (oi < oursEdits.size() || ti < theirsEdits.size()) {
 
-    size_t nextOurs = hasOurs ? oursEdits[oursEdit].baseStart : baseLines.size();
-    size_t nextTheirs =
-        hasTheirs ? theirsEdits[theirsEdit].baseStart : baseLines.size();
-    size_t nextEdit = std::min(nextOurs, nextTheirs);
+    // Determine next edit positions
+    size_t nextO = (oi < oursEdits.size())   ? oursEdits[oi].baseStart   : baseLines.size();
+    size_t nextT = (ti < theirsEdits.size()) ? theirsEdits[ti].baseStart : baseLines.size();
 
-    while (baseIdx < nextEdit) {
-      merged.push_back(baseLines[baseIdx++]);
-    }
-
-    if (hasOurs && hasTheirs && nextOurs == nextTheirs) {
-      const RegionEdit& o = oursEdits[oursEdit];
-      const RegionEdit& t = theirsEdits[theirsEdit];
-      if (regionsOverlap(o, t)) {
-        if (o.replacement == t.replacement && o.baseStart == t.baseStart &&
-            o.baseEnd == t.baseEnd) {
-          merged.insert(merged.end(), o.replacement.begin(), o.replacement.end());
-        } else {
-          conflict = true;
-          std::ostringstream marker;
-          marker << "<<<<<<< ours\n";
-          for (const auto& line : o.replacement) marker << line << '\n';
-          marker << "=======\n";
-          for (const auto& line : t.replacement) marker << line << '\n';
-          marker << ">>>>>>> theirs\n";
-          merged.push_back(marker.str());
-        }
-      }
-      baseIdx = std::max(o.baseEnd, t.baseEnd);
-      ++oursEdit;
-      ++theirsEdit;
-      continue;
-    }
-
-    if (hasOurs && (!hasTheirs || nextOurs <= nextTheirs)) {
-      const RegionEdit& o = oursEdits[oursEdit++];
+    // Case: only ours remaining
+    if (ti >= theirsEdits.size()) {
+      while (baseIdx < oursEdits[oi].baseStart)
+        merged.push_back(baseLines[baseIdx++]);
+      const RegionEdit& o = oursEdits[oi++];
       merged.insert(merged.end(), o.replacement.begin(), o.replacement.end());
       baseIdx = o.baseEnd;
       continue;
     }
 
-    if (hasTheirs) {
-      const RegionEdit& t = theirsEdits[theirsEdit++];
+    // Case: only theirs remaining
+    if (oi >= oursEdits.size()) {
+      while (baseIdx < theirsEdits[ti].baseStart)
+        merged.push_back(baseLines[baseIdx++]);
+      const RegionEdit& t = theirsEdits[ti++];
       merged.insert(merged.end(), t.replacement.begin(), t.replacement.end());
       baseIdx = t.baseEnd;
+      continue;
     }
+
+    // Check if the two next edits actually overlap
+    bool overlaps = oursEdits[oi].baseStart < theirsEdits[ti].baseEnd &&
+                    theirsEdits[ti].baseStart < oursEdits[oi].baseEnd;
+
+    if (!overlaps && nextO < nextT) {
+      // Ours edit comes first and doesn't touch theirs — apply independently
+      while (baseIdx < oursEdits[oi].baseStart)
+        merged.push_back(baseLines[baseIdx++]);
+      const RegionEdit& o = oursEdits[oi++];
+      merged.insert(merged.end(), o.replacement.begin(), o.replacement.end());
+      baseIdx = o.baseEnd;
+      continue;
+    }
+
+    if (!overlaps && nextT < nextO) {
+      // Theirs edit comes first and doesn't touch ours — apply independently
+      while (baseIdx < theirsEdits[ti].baseStart)
+        merged.push_back(baseLines[baseIdx++]);
+      const RegionEdit& t = theirsEdits[ti++];
+      merged.insert(merged.end(), t.replacement.begin(), t.replacement.end());
+      baseIdx = t.baseEnd;
+      continue;
+    }
+
+    // Both edits start at the same position — regardless of overlap, handle together
+    // (Even if they don't overlap by range, same-start means we must compare them.)
+
+    // Gather all edits that form one overlapping conflict region
+    size_t regionStart = std::min(oursEdits[oi].baseStart, theirsEdits[ti].baseStart);
+    size_t regionEnd   = std::max(oursEdits[oi].baseEnd,   theirsEdits[ti].baseEnd);
+
+    // Flush base lines up to region start
+    while (baseIdx < regionStart) merged.push_back(baseLines[baseIdx++]);
+
+    // Expand region while more edits overlap it
+    size_t oi2 = oi + 1, ti2 = ti + 1;
+    bool expanded = true;
+    while (expanded) {
+      expanded = false;
+      while (oi2 < oursEdits.size() && oursEdits[oi2].baseStart < regionEnd) {
+        regionEnd = std::max(regionEnd, oursEdits[oi2].baseEnd);
+        ++oi2; expanded = true;
+      }
+      while (ti2 < theirsEdits.size() && theirsEdits[ti2].baseStart < regionEnd) {
+        regionEnd = std::max(regionEnd, theirsEdits[ti2].baseEnd);
+        ++ti2; expanded = true;
+      }
+    }
+
+    // Build ours-side output for this region
+    std::vector<std::string> oursSide;
+    {
+      size_t cur = regionStart;
+      for (size_t k = oi; k < oi2; ++k) {
+        while (cur < oursEdits[k].baseStart)
+          oursSide.push_back(baseLines[cur++]);
+        oursSide.insert(oursSide.end(),
+          oursEdits[k].replacement.begin(), oursEdits[k].replacement.end());
+        cur = oursEdits[k].baseEnd;
+      }
+      // trailing base lines within region (after last ours edit)
+      while (cur < regionEnd) oursSide.push_back(baseLines[cur++]);
+    }
+
+    // Build theirs-side output for this region
+    std::vector<std::string> theirsSide;
+    {
+      size_t cur = regionStart;
+      for (size_t k = ti; k < ti2; ++k) {
+        while (cur < theirsEdits[k].baseStart)
+          theirsSide.push_back(baseLines[cur++]);
+        theirsSide.insert(theirsSide.end(),
+          theirsEdits[k].replacement.begin(), theirsEdits[k].replacement.end());
+        cur = theirsEdits[k].baseEnd;
+      }
+      while (cur < regionEnd) theirsSide.push_back(baseLines[cur++]);
+    }
+
+    if (oursSide == theirsSide) {
+      merged.insert(merged.end(), oursSide.begin(), oursSide.end());
+    } else {
+      conflict = true;
+      merged.push_back("<<<<<<< ours");
+      merged.insert(merged.end(), oursSide.begin(), oursSide.end());
+      merged.push_back("=======");
+      merged.insert(merged.end(), theirsSide.begin(), theirsSide.end());
+      merged.push_back(">>>>>>> theirs");
+    }
+
+    baseIdx = regionEnd;
+    oi = oi2;
+    ti = ti2;
   }
+
+  // Flush remaining base lines
+  while (baseIdx < baseLines.size()) merged.push_back(baseLines[baseIdx++]);
 
   result.conflict = conflict;
   result.text = joinLines(merged);
