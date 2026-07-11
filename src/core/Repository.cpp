@@ -1,12 +1,15 @@
 #include "core/Repository.h"
 #include "core/branch.hxx"
 #include "core/Commit.h"
+#include "fileUtils/diff.h"
 #include "fileUtils/hash.h"
 #include "fileUtils/utils.h"
 #include <fstream>
 #include <iostream>
 #include <filesystem>
+#include <sstream>
 #include <stdexcept>
+#include <unordered_set>
 #include "fileUtils/serialization.hxx"
 
 namespace fs = std::filesystem;
@@ -82,12 +85,97 @@ void Repository::loadRepo(){
       throw std::runtime_error("Not a MiniGit repository");
   }
 }
+
+Commit Repository::loadCommit(const std::string& commitId) const {
+  if (commitId.empty()) {
+    return Commit("", "", "", {}, "", "");
+  }
+  return Serialization::deserialize(repoPath + "/commits/" + commitId + ".bin");
+}
+
+void Repository::collectAncestors(const std::string& commitId,
+                                  std::unordered_set<std::string>& out) const {
+  std::string current = commitId;
+  while (!current.empty()) {
+    if (!out.insert(current).second) break;
+    Commit c = loadCommit(current);
+    current = c.getParentCommitId();
+    const std::string second = c.getSecondParentCommitId();
+    if (!second.empty()) {
+      collectAncestors(second, out);
+    }
+  }
+}
+
+bool Repository::isAncestorOf(const std::string& ancestor,
+                              const std::string& descendant) const {
+  if (ancestor.empty()) return false;
+  std::unordered_set<std::string> ancestors;
+  collectAncestors(descendant, ancestors);
+  return ancestors.count(ancestor) > 0;
+}
+
+std::string Repository::findMergeBase(const std::string& commitA,
+                                      const std::string& commitB) const {
+  if (commitA.empty() || commitB.empty()) return "";
+  if (commitA == commitB) return commitA;
+
+  std::unordered_set<std::string> ancestorsA;
+  collectAncestors(commitA, ancestorsA);
+
+  std::unordered_set<std::string> visitedB;
+  std::vector<std::string> queue = {commitB};
+  while (!queue.empty()) {
+    std::string current = queue.back();
+    queue.pop_back();
+    if (current.empty() || !visitedB.insert(current).second) continue;
+    if (ancestorsA.count(current) > 0) return current;
+
+    Commit c = loadCommit(current);
+    if (!c.getParentCommitId().empty()) queue.push_back(c.getParentCommitId());
+    if (!c.getSecondParentCommitId().empty()) {
+      queue.push_back(c.getSecondParentCommitId());
+    }
+  }
+
+  return "";
+}
+
+void Repository::writeWorkingTreeFile(const std::string& relativePath,
+                                      const std::string& content) {
+  fs::path fullPath = fs::path(repoRoot) / relativePath;
+  if (fullPath.has_parent_path()) {
+    fs::create_directories(fullPath.parent_path());
+  }
+  std::ofstream out(fullPath, std::ios::binary | std::ios::trunc);
+  if (!out.is_open()) {
+    throw std::runtime_error("Could not write file: " + fullPath.string());
+  }
+  out.write(content.c_str(), static_cast<std::streamsize>(content.size()));
+}
+
+void Repository::removeWorkingTreeFile(const std::string& relativePath) {
+  fs::path fullPath = fs::path(repoRoot) / relativePath;
+  if (fs::exists(fullPath)) {
+    fs::remove(fullPath);
+  }
+}
+
+std::unordered_map<std::string, std::string> Repository::unionFilePaths(
+    const std::unordered_map<std::string, std::string>& a,
+    const std::unordered_map<std::string, std::string>& b) const {
+  std::unordered_map<std::string, std::string> result = a;
+  for (const auto& [path, content] : b) {
+    result[path] = content;
+  }
+  return result;
+}
 void Repository::add(std::vector<std::string>& filesToStage)
 {
-  
-  std::ofstream indexFile(".mgit/staged", std::ios::app);
+  loadRepo();
+  std::ofstream indexFile(repoPath + "/staged", std::ios::app);
   if (!indexFile.is_open()) {
-        std::cerr << "Fatal: Could not open .mgit/staged for writing.\n";
+        std::cerr << "Fatal: Could not open " << repoPath << "/staged for writing.\n";
         return;
     }
 
@@ -100,70 +188,61 @@ void Repository::add(std::vector<std::string>& filesToStage)
     indexFile.close();
 }
 void Repository::commit(const std::string& message){
+  commit(message, "");
+}
+
+void Repository::commit(const std::string& message, const std::string& secondParentCommitId) {
   loadRepo();
 
-  std::string commitId = hash::generateHash(message);
   std::string parentCommitId = getLatestCommit();
-
   std::string date = utils::getCurrentDate();
   std::string time = utils::getCurrentTime();
-  
-  std::ifstream indexFile(".mgit/staged");
+
+  std::ifstream indexFile(repoPath + "/staged");
   std::vector<std::string> stagedFiles;
   std::string file;
-  while (std::getline(indexFile, file)) 
-  {
-    if (!file.empty()) 
-    {
+  while (std::getline(indexFile, file)) {
+    if (!file.empty()) {
       stagedFiles.push_back(file);
     }
   }
   indexFile.close();
 
   std::unordered_map<std::string, std::string> mp;
-  if(stagedFiles.size() == 0)
-  {
-    std::cout<<"No files staged.\n";
+  if (stagedFiles.size() == 0) {
+    std::cout << "No files staged.\n";
     return;
-  }
-  else if(stagedFiles.size() == 1 && stagedFiles[0] == ".") mp = utils::buildSnapshotAll(repoRoot);
-  else
-  {
+  } else if (stagedFiles.size() == 1 && stagedFiles[0] == ".") {
+    mp = utils::buildSnapshotAll(repoRoot);
+  } else {
     mp = utils::buildSnapshot(repoRoot, stagedFiles);
-    if(!parentCommitId.empty())
-    {
-      std::string parentCommitFilePath = repoPath + "/commits/" + parentCommitId + ".bin";
-      Commit parentCommit = Serialization::deserialize(parentCommitFilePath);
+    if (!parentCommitId.empty()) {
+      Commit parentCommit = loadCommit(parentCommitId);
       std::unordered_map<std::string, std::string> parent_mp = parentCommit.getFileBlob();
-      for(auto [file, content] : parent_mp)
-      {
-        if(mp.find(file)!=mp.end()) continue;
-        mp[file] = content;
+      for (auto [path, content] : parent_mp) {
+        if (mp.find(path) != mp.end()) continue;
+        mp[path] = content;
       }
     }
-    
   }
-  
-  Commit newCommit(commitId, message, parentCommitId, mp, date, time);
+
+  std::ostringstream commitPayload;
+  commitPayload << message << '\0' << parentCommitId << '\0' << secondParentCommitId << '\0';
+  for (const auto& [path, content] : mp) {
+    commitPayload << path << '\0' << content << '\0';
+  }
+  std::string commitId = hash::generateHash(commitPayload.str());
+
+  Commit newCommit(commitId, message, parentCommitId, mp, date, time,
+                   secondParentCommitId);
 
   std::string path = repoPath + "/commits/" + commitId + ".bin";
-  newCommit.serialize(path); // Commit Object stored in Disk.
+  newCommit.serialize(path);
 
-  Commit check = Serialization::deserialize(path);
-  std::cout<< check.getCommitMsg()<<'\n';
-
-  for(auto [p, q]: check.getFileBlob()){
-    std::cout<<"\n\n----------------------------------------NEW FILE-------------------------------------\n\n";
-    std::cout << p << ": " << q.substr(0, 100) << "\n";
-  }
-  
-
-  //Updating the LatestCommit in the branch from here.
   std::string branch = getCurrentBranch();
   utils::writeToFile(repoPath + "/refs/heads/" + branch, commitId);
-  
-  // Clearing the staging area
-  std::ofstream stagingFile(".mgit/staged", std::ios::trunc);
+
+  std::ofstream stagingFile(repoPath + "/staged", std::ios::trunc);
   stagingFile.close();
 }
 
@@ -181,6 +260,7 @@ void Repository::updateBranch(std::string branch, std::string commitId){
   }
 }
 void Repository::status(){
+  loadRepo();
   std::cout<<"On branch "<<getCurrentBranch()<<'\n';
   std::string commitId = getLatestCommit();
   if (!commitId.empty()) {
@@ -203,54 +283,159 @@ void Repository::status(){
 
 void Repository::merge(const std::string& targetBranch) {
   loadRepo();
-  std::string currCommitId = getLatestCommit();
-  
-  std::string branchPath = repoPath + "/refs/heads/" + targetBranch;
-  if(!std::filesystem::exists(branchPath)){
-      std::cout << "Target branch '" << targetBranch << "' does not exist!\n";
-      return;
+
+  const std::string currentBranch = getCurrentBranch();
+  const std::string currCommitId = getLatestCommit();
+
+  const std::string branchPath = repoPath + "/refs/heads/" + targetBranch;
+  if (!fs::exists(branchPath)) {
+    std::cout << "Target branch '" << targetBranch << "' does not exist!\n";
+    return;
   }
-  std::string targetCommitId = getBranchCommit(targetBranch);
 
-  std::string currCommitPath = repoPath + "/commits/" + currCommitId + ".bin";
-  std::string targetCommitPath = repoPath + "/commits/" + targetCommitId + ".bin";
+  const std::string targetCommitId = getBranchCommit(targetBranch);
+  if (targetCommitId.empty()) {
+    std::cout << "Target branch '" << targetBranch << "' has no commits.\n";
+    return;
+  }
 
-  Commit currCommit = Serialization::deserialize(currCommitPath);
-  Commit targetCommit = Serialization::deserialize(targetCommitPath);
+  if (currCommitId == targetCommitId) {
+    std::cout << "Already up to date.\n";
+    return;
+  }
 
-  auto currBlob = currCommit.getFileBlob();
-  auto targetBlob = targetCommit.getFileBlob();
+  if (!currCommitId.empty() && isAncestorOf(currCommitId, targetCommitId)) {
+    utils::writeToFile(repoPath + "/refs/heads/" + currentBranch, targetCommitId);
+    checkout(currentBranch);
+    std::cout << "Fast-forward\n";
+    return;
+  }
 
-  for (auto const& [fileName, targetContent] : targetBlob) {
-      if (currBlob.find(fileName) != currBlob.end()) {
-          if (currBlob[fileName] != targetContent) {
-              std::cout << "\nMerge Conflict detected in: " << fileName << "\n";
-              std::cout << "1. Accept Incoming Changes\n";
-              std::cout << "2. Reject Incoming Changes\n";
-              std::cout << "3. Keep Both Changes\n";
-              std::cout << "Enter your choice (1/2/3): ";
-              std::cout<<"\n<<<< INCOMING CHANGES >>>>\n"<<targetContent<<"\n<<<< CURRENT CHANGES >>>>\n"<<currBlob[fileName]<<'\n';
-              int choice;
-              std::cin >> choice;
-              if (choice == 1) {
-                  utils::writeToFile(repoRoot + "/" + fileName, targetContent);
-              } else if (choice == 3) {
-                  std::string combined = currBlob[fileName] + "\n" + targetContent;
-                  utils::writeToFile(repoRoot + "/" + fileName, combined);
-              }
-          }
-      } else {
-          utils::writeToFile(repoRoot + "/" + fileName, targetContent);
+  if (isAncestorOf(targetCommitId, currCommitId)) {
+    std::cout << "Already up to date.\n";
+    return;
+  }
+
+  Commit currCommit = loadCommit(currCommitId);
+  Commit targetCommit = loadCommit(targetCommitId);
+  const std::string baseCommitId = findMergeBase(currCommitId, targetCommitId);
+  Commit baseCommit = loadCommit(baseCommitId);
+
+  const auto currBlob = currCommit.getFileBlob();
+  const auto targetBlob = targetCommit.getFileBlob();
+  const auto baseBlob = baseCommit.getFileBlob();
+
+  const auto allPaths = unionFilePaths(unionFilePaths(currBlob, targetBlob), baseBlob);
+  bool hasConflicts = false;
+
+  for (const auto& [filePath, _] : allPaths) {
+    const bool inBase = baseBlob.count(filePath) > 0;
+    const bool inCurr = currBlob.count(filePath) > 0;
+    const bool inTarget = targetBlob.count(filePath) > 0;
+
+    const std::string baseContent = inBase ? baseBlob.at(filePath) : "";
+    const std::string currContent = inCurr ? currBlob.at(filePath) : "";
+    const std::string targetContent = inTarget ? targetBlob.at(filePath) : "";
+
+    if (inCurr && inTarget) {
+      if (currContent == targetContent) continue;
+
+      if (inBase && currContent == baseContent) {
+        writeWorkingTreeFile(filePath, targetContent);
+        continue;
       }
+      if (inBase && targetContent == baseContent) {
+        writeWorkingTreeFile(filePath, currContent);
+        continue;
+      }
+
+      diff::MergeResult merged =
+          diff::threeWayMerge(baseContent, currContent, targetContent);
+      writeWorkingTreeFile(filePath, merged.text);
+      if (merged.conflict) {
+        hasConflicts = true;
+        std::cout << "CONFLICT (content): " << filePath << '\n';
+      }
+      continue;
+    }
+
+    if (inCurr && !inTarget) {
+      if (!inBase) continue;
+      if (currContent == baseContent) {
+        removeWorkingTreeFile(filePath);
+      } else {
+        hasConflicts = true;
+        std::cout << "CONFLICT (modify/delete): " << filePath << '\n';
+        writeWorkingTreeFile(filePath, currContent);
+      }
+      continue;
+    }
+
+    if (!inCurr && inTarget) {
+      if (!inBase) {
+        writeWorkingTreeFile(filePath, targetContent);
+        continue;
+      }
+      if (targetContent == baseContent) {
+        removeWorkingTreeFile(filePath);
+      } else {
+        hasConflicts = true;
+        std::cout << "CONFLICT (modify/delete): " << filePath << '\n';
+        writeWorkingTreeFile(filePath, targetContent);
+      }
+      continue;
+    }
+
+    if (inBase && !inCurr && !inTarget) {
+      removeWorkingTreeFile(filePath);
+    }
+  }
+
+  if (hasConflicts) {
+    std::cout << "Automatic merge failed; fix conflicts and then commit the result.\n";
+    return;
   }
 
   std::vector<std::string> filesToStage = {"."};
   add(filesToStage);
-  commit("Merge branch " + targetBranch);
-  std::cout << "Successfully merged " << targetBranch << " into " << getCurrentBranch() << "!\n";
+  commit("Merge branch '" + targetBranch + "'", targetCommitId);
+  std::cout << "Merge made by the 'recursive' strategy.\n";
+}
+
+void Repository::diff(const std::string& filePath) {
+  loadRepo();
+
+  const std::string commitId = getLatestCommit();
+  if (commitId.empty()) {
+    std::cout << "No commits yet.\n";
+    return;
+  }
+
+  Commit headCommit = loadCommit(commitId);
+  const auto blob = headCommit.getFileBlob();
+
+  if (filePath.empty()) {
+    for (const auto& [path, content] : blob) {
+      const std::string working = utils::readFromFile(repoRoot + "/" + path);
+      if (working != content) {
+        std::cout << diff::formatUnified("a/" + path, "b/" + path, content, working);
+      }
+    }
+    return;
+  }
+
+  if (blob.find(filePath) == blob.end()) {
+    std::cout << "File not tracked: " << filePath << '\n';
+    return;
+  }
+
+  const std::string working = utils::readFromFile(repoRoot + "/" + filePath);
+  std::cout << diff::formatUnified("a/" + filePath, "b/" + filePath, blob.at(filePath),
+                                   working);
 }
 
 void Repository::checkout(std::string branch){
+  loadRepo();
   std::string path = repoPath + "/refs/heads/" + branch;
   if(!std::filesystem::exists(path)){
     std::cout<<"The branch "<<branch<<" does not exist!\n";
@@ -309,11 +494,13 @@ void Repository::checkout(std::string branch){
 }
 
 void Repository::createBranch(std::string branch){
+  loadRepo();
   std::string path = repoPath + "/refs/heads/" + branch;
   utils::writeToFile(path, getLatestCommit());
 }
 
 void Repository::log() {
+    loadRepo();
     std::string commitId = getLatestCommit();
     std::string currentBranch = getCurrentBranch();
 

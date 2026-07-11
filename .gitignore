@@ -2,3 +2,6 @@
 *.o
 mgit
 mgit.exe
+tests/
+test_repo/
+decoded_v8.cpp

@@ -46,6 +46,12 @@ int main(int argc, char* argv[]){
       return 1;
     }
     repo.merge(argv[2]);
+  }else if(command == "diff"){
+    if(argc >= 3){
+      repo.diff(argv[2]);
+    }else{
+      repo.diff();
+    }
   }else{
     std::cout<<"Unknown Command.\n";
   }

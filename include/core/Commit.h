@@ -5,6 +5,7 @@ class Commit{
   std::string commitId;
   std::string commitMsg;
   std::string parentCommitId;
+  std::string secondParentCommitId;
   std::unordered_map<std::string, std::string> fileBlob;
   std::string date;
   std::string time;
@@ -15,10 +16,12 @@ class Commit{
        const std::string& parentCommitId,
        const std::unordered_map<std::string, std::string>& file,
        const std::string& date,
-       const std::string& time);
+       const std::string& time,
+       const std::string& secondParentCommitId = "");
     std::string getCommitId() const;
     std::string getCommitMsg() const;
     std::string getParentCommitId() const;
+    std::string getSecondParentCommitId() const;
     std::unordered_map<std::string, std::string> getFileBlob() const;
     std::string getDate() const;
     std::string getTime() const;
